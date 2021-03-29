@@ -1,25 +1,37 @@
-%function[] = IDcfu_Label(fileimage, water)
-    %Input: day0, plate# and .tif file
-    %This script identifies bacteria colonies in a petri dish. It generates a
-    %mask first to avoid the outer part of the plate. Later, segmentation and
-    %label identification allows to target even those colonies that are not
-    %completely circular. It retrieves a .jpg file with the identifies colonies
-    %and a .mat file with a label, morphological and RGB-lab pixel
-    %information. 
-    %Last version 25.05.2020
+%Updated script for labeling images using the pipeline built in
+%IDcfu_Final.m. It requires one or more .tif images (16-bit) and generates
+%two different outputs: 1) .tif image turned to .png and 2) BW image that
+%correspond to the labels to be used during ML-segmentation.
 
-    %clear
+%Get files. Change directory depending on where the images are stored.
+filesdir = './raw/';
+fnames = dir('./raw/*tif');
+%Fused
+% filesdir = './raw/fused/';
+% fnames = dir('./raw/fused/*tif');
+%Difficult
+% filesdir = './raw/fused/difficult/';
+% fnames = dir('./raw/fused/difficult/*tif');
+%If fused colonies are observed in the image, use water=1
+water = 0;
+numfids = length(fnames);
 
-    %to test without function
-    fileimage = 'i1_d25_30µl-nr5';
-    water = 1;
-
-
+%%
+for k = 1:numfids
     %Read files. Batch of pictures from a plate taken along several days 
+    %Read the file and get the name only
+    fileimage = strsplit(fnames(k).name,'.');
     %16-bit file, RGB range 0-2500
-    I = imread(fileimage, 'tif');
+    I = imread(strcat(filesdir, fileimage{1}), 'tif');
     %Turn into 8-bit, RGB range 0-255 with a simple division
     I = uint8(I/257);
+    
+%%
+    figure
+    %imshow(Lrgb)
+    imshow(I)
+    print(strcat(fileimage{1},'_original'),'-dpng');
+    close;
 
     %%
     %%Remove uninterested region from the image 
@@ -63,6 +75,8 @@
     
     %Filter bright colonies
     rgbBW = rgbI >=200;%imshow(rgbBW)
+    %For difficult colonies change threshold
+    %rgbBW = rgbI >=210;%imshow(rgbBW)
     %remove connected objects
     rgbI_nobord = imclearborder(rgbBW,8);%imshow(rgbI_nobord)
     %to fill up holes
@@ -104,36 +118,36 @@
         L = (L1 | L2);
         n_colonies = (n1+n2);
     end
-%%
-if water == 1
-%Extra option to do watershed or not.
-    %Remove small white objects from the image
-    BW = ~bwareaopen(~L, 10);
-    %BW = L;
-    %Get distance between white objects
-    D = -bwdist(~BW);
-    %Computes local maxima. Center of the colonies
-    mask = imextendedmin(D,1,4);
-    
-%     figure
-%     imshowpair(BW,mask,'blend')
-%     print(strcat(file,'-blend'),'-dpng');
-%     close;
-    
-    minima = imimposemin(D,mask);
-    Lw = watershed(minima);
-    L = BW;
-    L(Lw == 0) = 0;
-    Ll = bwlabel(L);   
+    %%
+    if water == 1
+    %Extra option to do watershed or not.
+        %Remove small white objects from the image
+        BW = ~bwareaopen(~L, 10);
+        %BW = L;
+        %Get distance between white objects
+        D = -bwdist(~BW);
+        %Computes local maxima. Center of the colonies
+        mask = imextendedmin(D,1,4);
 
-%     figure
-%     imshow(BW2)
-%     print(strcat(file,'-BW'),'-dpng');
-%     close;
-else
-% Generate labeled BW
-    Ll = bwlabel(L);   
-end
+    %     figure
+    %     imshowpair(BW,mask,'blend')
+    %     print(strcat(file,'-blend'),'-dpng');
+    %     close;
+
+        minima = imimposemin(D,mask);
+        Lw = watershed(minima);
+        L = BW;
+        L(Lw == 0) = 0;
+        Ll = bwlabel(L);   
+
+    %     figure
+    %     imshow(BW2)
+    %     print(strcat(file,'-BW'),'-dpng');
+    %     close;
+    else
+    % Generate labeled BW
+        Ll = bwlabel(L);   
+    end
  
 %%    
 
@@ -185,42 +199,30 @@ end
     end
 
     filter2 = nonzeros(filter2);
-%%
-%find unique labels in the BW images. Should be equal to the number of
-%elements in B
-e = unique(Ll);
-etozero = setdiff(e, filter2);
+    %%
+    %find unique labels in the BW images. Should be equal to the number of
+    %elements in B
+    e = unique(Ll);
+    etozero = setdiff(e, filter2);
 
-for i = 1:length(etozero)
-    Ll(Ll == etozero(i)) = 0;
+    for i = 1:length(etozero)
+        Ll(Ll == etozero(i)) = 0;
+    end
+
+    %Label area inside the colonies as 2
+    Ll(Ll > 0) = 1;
+    %Border as 1
+    outline = double(bwperim(Ll));
+
+    %Three labels
+    labeled = (Ll + outline);
+    %Get three different colors
+    %Lrgb = label2rgb(labeled, 'spring','c','shuffle');
+
+    figure
+    %imshow(Lrgb)
+    imshow(labeled)
+    print(strcat(fileimage{1},'_bw'),'-dpng');
+    close;
+    
 end
-
-%Label area inside the colonies as 2
-Ll(Ll > 0) = 2;
-%Border as 1
-outline = double(bwperim(Ll));
-
-%Three labels
-labeled = (Ll + outline);
-%Get three different colors
-Lrgb = label2rgb(labeled, 'spring','c','shuffle');
-
-figure
-imshow(Lrgb)
-%%
-%BW = imbinarize(Ll);
-% if water == 1
-% %     figure
-% %     imshow(Lrgb)
-% %     print(strcat(fileimage,'-BWw'), '-dtiff');
-% %     close;
-%       imwrite(Lrgb, strcat(fileimage,'-Wgt.tiff') )
-% else
-% %     figure
-% %     imshow(Lrgb)
-% %     print(strcat(fileimage,'-BW'), '-dtiff');
-% %     close;
-%     imwrite(Lrgb, strcat(fileimage,'-gt.tiff') )
-% end
-
-%end
