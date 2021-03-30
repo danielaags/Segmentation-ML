@@ -4,16 +4,16 @@
 %correspond to the labels to be used during ML-segmentation.
 
 %Get files. Change directory depending on where the images are stored.
-filesdir = './raw/';
-fnames = dir('./raw/*tif');
+% filesdir = './raw/';
+% fnames = dir('./raw/*tif');
 %Fused
-% filesdir = './raw/fused/';
-% fnames = dir('./raw/fused/*tif');
+filesdir = './raw/fused/';
+fnames = dir('./raw/fused/*tif');
 %Difficult
 % filesdir = './raw/fused/difficult/';
 % fnames = dir('./raw/fused/difficult/*tif');
 %If fused colonies are observed in the image, use water=1
-water = 0;
+water = 1;
 numfids = length(fnames);
 
 %%
